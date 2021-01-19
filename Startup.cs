@@ -64,7 +64,9 @@ namespace PWABuilder.ServiceWorkerDetector
                 "https://pwabuilder.com",
                 "https://preview.pwabuilder.com",
                 "https://localhost:3000",
-                "http://localhost:3000"
+                "http://localhost:3000",
+                "http://localhost:8000",
+                "https://localhost:8000",
             };
             return allowedOrigins.Any(o => origin.Contains(o, StringComparison.OrdinalIgnoreCase));
         }
