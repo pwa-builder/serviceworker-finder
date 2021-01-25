@@ -71,9 +71,14 @@ namespace PWABuilder.ServiceWorkerDetector
                 "https://localhost:3000",
                 "http://localhost:3000",
                 "http://localhost:8000",
-                "https://localhost:8000",
+                "https://localhost:8000"
             };
-            return allowedOrigins.Any(o => origin.Contains(o, StringComparison.OrdinalIgnoreCase));
+            var allowedWildcardOrigins = new[]
+            {
+                ".azurestaticapps.net"
+            };
+            return allowedOrigins.Any(o => origin.Contains(o, StringComparison.OrdinalIgnoreCase)) ||
+                allowedWildcardOrigins.Any(o => origin.Contains(o, StringComparison.OrdinalIgnoreCase));
         }
     }
 }
