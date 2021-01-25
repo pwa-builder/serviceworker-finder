@@ -349,3 +349,6 @@ MigrationBackup/
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
 /.local-chromium
+
+# Production app settings contains secrets. Exclude from source control
+appsettings.Production.json 

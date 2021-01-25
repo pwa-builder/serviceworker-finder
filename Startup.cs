@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using PWABuilder.ServiceWorkerDetector.Models;
 using PWABuilder.ServiceWorkerDetector.Services;
 using System;
 using System.Collections.Generic;
@@ -28,8 +29,12 @@ namespace PWABuilder.ServiceWorkerDetector
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            services.Configure<UrlLoggerApiSettings>(Configuration.GetSection("UrlLoggerApi"));
+
             services.AddControllers();
             services.AddTransient<Detector>();
+            services.AddTransient<UrlLogger>();
+            services.AddSingleton(new System.Net.Http.HttpClient());
             services.AddHostedService<ZombieChromiumKiller>();
             services.AddMemoryCache(); // 50MB max size
             services.AddCors(options =>
