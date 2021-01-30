@@ -14,11 +14,15 @@ namespace PWABuilder.ServiceWorkerDetector.Controllers
     [Route("[controller]/[action]")]
     public class ServiceWorkerController : ControllerBase
     {
-        private readonly Detector serviceWorkerDetector;
+        private readonly PuppeteerDetector puppeteerSwDetector;
+        private readonly AllDetectors allDetectors;
 
-        public ServiceWorkerController(Detector serviceWorkerDetector)
+        public ServiceWorkerController(
+            PuppeteerDetector puppeteerSwDetector,
+            AllDetectors allDetectors)
         {
-            this.serviceWorkerDetector = serviceWorkerDetector;
+            this.puppeteerSwDetector = puppeteerSwDetector;
+            this.allDetectors = allDetectors;
         }
 
         [HttpGet]
@@ -30,12 +34,12 @@ namespace PWABuilder.ServiceWorkerDetector.Controllers
         [HttpGet]
         public Task<AllChecksResult> RunAllChecks(Uri url)
         {
-            return this.serviceWorkerDetector.RunAll(url);
+            return this.allDetectors.Run(url);
         }
 
         public async Task<AllChecksResult> EnsureServiceWorkerFound(Uri url)
         {
-            var result = await this.serviceWorkerDetector.RunAll(url, cacheSuccessfulResults: false);
+            var result = await this.puppeteerSwDetector.Run(url, cacheSuccessfulResults: false);
             if (!result.HasSW)
             {
                 throw new InvalidOperationException($"No service worker found for {url}. Timed out: {result.ServiceWorkerDetectionTimedOut}, Details: {result.NoServiceWorkerFoundDetails}");
@@ -47,25 +51,25 @@ namespace PWABuilder.ServiceWorkerDetector.Controllers
         [HttpGet]
         public Task<Uri?> GetServiceWorkerUrl(Uri url)
         {
-            return this.serviceWorkerDetector.GetServiceWorkerUrl(url);
+            return this.puppeteerSwDetector.GetServiceWorkerUrl(url);
         }
 
         [HttpGet]
         public Task<Uri?> GetScope(Uri url)
         {
-            return this.serviceWorkerDetector.GetScope(url);
+            return this.puppeteerSwDetector.GetScope(url);
         }
 
         [HttpGet]
         public Task<bool> GetPushRegistrationStatus(Uri url)
         {
-            return this.serviceWorkerDetector.GetPushRegistrationStatus(url);
+            return this.puppeteerSwDetector.GetPushRegistrationStatus(url);
         }
 
         [HttpGet]
         public Task<bool> GetPeriodicSyncStatus(Uri url)
         {
-            return this.serviceWorkerDetector.GetPeriodicSyncStatus(url);
+            return this.puppeteerSwDetector.GetPeriodicSyncStatus(url);
         }
     }
 }

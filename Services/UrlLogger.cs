@@ -16,12 +16,12 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         private readonly HttpClient http;
 
         public UrlLogger(
-            IOptions<UrlLoggerApiSettings> settings, 
-            HttpClient http,
+            IOptions<UrlLoggerApiSettings> settings,
+            IHttpClientFactory httpClientFactory,
             ILogger<UrlLogger> logger)
         {
             this.settings = settings;
-            this.http = http;
+            this.http = httpClientFactory.CreateClient();
             this.logger = logger;
         }
 

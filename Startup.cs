@@ -32,10 +32,12 @@ namespace PWABuilder.ServiceWorkerDetector
             services.Configure<UrlLoggerApiSettings>(Configuration.GetSection("UrlLoggerApi"));
 
             services.AddControllers();
-            services.AddTransient<Detector>();
+            services.AddTransient<PuppeteerDetector>();
+            services.AddTransient<HtmlParseDetector>();
+            services.AddTransient<AllDetectors>();
             services.AddTransient<UrlLogger>();
-            services.AddSingleton(new System.Net.Http.HttpClient());
             services.AddHostedService<ZombieChromiumKiller>();
+            services.AddHttpClient();
             services.AddMemoryCache(); // 50MB max size
             services.AddCors(options =>
             {

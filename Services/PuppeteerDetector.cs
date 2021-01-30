@@ -13,9 +13,12 @@ using System.Threading.Tasks;
 
 namespace PWABuilder.ServiceWorkerDetector.Services
 {
-    public class Detector
+    /// <summary>
+    /// Service that uses Puppeteer (headless Chrome) to detect a service worker.
+    /// </summary>
+    public class PuppeteerDetector
     {
-        private readonly ILogger<Detector> logger;
+        private readonly ILogger<PuppeteerDetector> logger;
         private readonly IMemoryCache successfulChecksCache;
         private readonly HttpClient http;
         private readonly UrlLogger urlLogService;
@@ -24,15 +27,13 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         private static readonly int serviceWorkerDetectionTimeoutMs = (int)TimeSpan.FromSeconds(10).TotalMilliseconds;
         private static readonly TimeSpan successfulCheckCacheExpiration = TimeSpan.FromMinutes(5);
 
-        public Detector(
-            ILogger<Detector> logger,
-            UrlLogger urlLogService,
-            HttpClient http,
+        public PuppeteerDetector(
+            ILogger<PuppeteerDetector> logger,
+            IHttpClientFactory httpClientFactory,
             IMemoryCache successfulChecksCache)
         {
             this.logger = logger;
-            this.http = http;
-            this.urlLogService = urlLogService;
+            this.http = httpClientFactory.CreateClient();
             this.successfulChecksCache = successfulChecksCache;
         }
 
@@ -41,16 +42,8 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         /// </summary>
         /// <param name="uri"></param>
         /// <returns></returns>
-        public async Task<AllChecksResult> RunAll(Uri uri, bool cacheSuccessfulResults = true)
+        public async Task<AllChecksResult> Run(Uri uri, bool cacheSuccessfulResults = true)
         {
-            // If it's a localhost, don't spin it up. Potential security thread.
-            if(uri.IsLoopback)
-            {
-                throw new ArgumentException("URIs must not be local");
-            }
-
-            var stopwatch = new Stopwatch();
-            stopwatch.Start();
             try
             {
                 // Have we successfully detected this URL before? If so, return that.
@@ -64,7 +57,6 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 if (!serviceWorkerDetection.ServiceWorkerDetected)
                 {
                     // No service worker? Punt.
-                    urlLogService.LogUrlResult(uri, false, serviceWorkerDetection.NoServiceWorkerFoundDetails, stopwatch.Elapsed);
                     return new AllChecksResult
                     {
                         ServiceWorkerDetectionTimedOut = serviceWorkerDetection.TimedOut,
@@ -75,7 +67,6 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 var swScope = await TryGetScope(serviceWorkerDetection.Page, uri);
                 var swHasPushReg = await TryCheckPushRegistration(serviceWorkerDetection.Page, uri);
                 this.logger.LogInformation("Successfully detected service worker for {uri}", uri);
-                urlLogService.LogUrlResult(uri, true, null, stopwatch.Elapsed);
                 var result = new AllChecksResult
                 {
                     Url = serviceWorkerDetection.Worker.Uri,
@@ -93,13 +84,15 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             }
             catch (Exception error)
             {
-                urlLogService.LogUrlResult(uri, false, error.ToString(), stopwatch.Elapsed);
                 logger.LogError(error, "Error running all checks for {url}", uri);
-                throw;
-            }
-            finally
-            {
-                stopwatch.Stop();
+                return new AllChecksResult
+                {
+                    HasPushRegistration = false,
+                    NoServiceWorkerFoundDetails = "Error during Puppeteer service worker detection. " + error.Message,
+                    Scope = null,
+                    ServiceWorkerDetectionTimedOut = error is TimeoutException or Polly.Timeout.TimeoutRejectedException,
+                    Url = null
+                };
             }
         }
 
