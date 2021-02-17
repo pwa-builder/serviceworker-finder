@@ -54,7 +54,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             // Otherwise, wait for the Puppeteer task.
             var finalResult = successfulResult ?? await puppeteerTask;
 
-            urlLogService.LogUrlResult(uri, finalResult.HasSW, finalResult.NoServiceWorkerFoundDetails, stopwatch.Elapsed);
+            urlLogService.LogUrlResult(uri, finalResult.HasSW, finalResult.ServiceWorkerDetectionTimedOut, finalResult.NoServiceWorkerFoundDetails, stopwatch.Elapsed);
             stopwatch.Stop();
 
             return finalResult;

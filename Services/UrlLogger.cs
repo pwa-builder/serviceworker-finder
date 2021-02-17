@@ -25,7 +25,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             this.logger = logger;
         }
 
-        public void LogUrlResult(Uri url, bool success, string? error, TimeSpan elapsed)
+        public void LogUrlResult(Uri url, bool success, bool timedOut, string? error, TimeSpan elapsed)
         {
             if (this.settings.Value.Url == null)
             {
@@ -38,7 +38,8 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 Url = url,
                 ServiceWorkerDetected = success,
                 ServiceWorkerDetectionError = error,
-                ServiceWorkerDetectionTimeInMs = elapsed.TotalMilliseconds
+                ServiceWorkerDetectionTimeInMs = elapsed.TotalMilliseconds,
+                ServiceWorkerDetectionTimedOut = timedOut
             });
             this.http.PostAsync(this.settings.Value.Url, new StringContent(args))
                 .ContinueWith(_ => logger.LogInformation("Successfully sent {url} to URL logging service. Success = {success}, Error = {error}, Elapsed = {elapsed}", url, success, error, elapsed), TaskContinuationOptions.OnlyOnRanToCompletion)
