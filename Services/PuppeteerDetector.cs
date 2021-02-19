@@ -85,12 +85,13 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             catch (Exception error)
             {
                 logger.LogError(error, "Error running all checks for {url}", uri);
+                var isTimeout = error is TimeoutException || error is Polly.Timeout.TimeoutRejectedException || error.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase);
                 return new AllChecksResult
                 {
                     HasPushRegistration = false,
                     NoServiceWorkerFoundDetails = "Error during Puppeteer service worker detection. " + error.Message,
                     Scope = null,
-                    ServiceWorkerDetectionTimedOut = error is TimeoutException or Polly.Timeout.TimeoutRejectedException,
+                    ServiceWorkerDetectionTimedOut = isTimeout,
                     Url = null
                 };
             }
