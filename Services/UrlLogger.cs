@@ -25,7 +25,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             this.logger = logger;
         }
 
-        public void LogUrlResult(Uri url, bool success, bool timedOut, string? error, TimeSpan elapsed)
+        public void LogUrlResult(Uri url, ServiceWorkerDetectionResult result, TimeSpan elapsed)
         {
             if (this.settings.Value.Url == null)
             {
@@ -36,13 +36,14 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             var args = System.Text.Json.JsonSerializer.Serialize(new
             {
                 Url = url,
-                ServiceWorkerDetected = success,
-                ServiceWorkerDetectionError = error,
+                ServiceWorkerDetected = result.HasSW,
+                ServiceWorkerDetectionError = result.ServiceWorkerDetectionTimedOut,
+                ServiceWorkerDetectionTimedOut = result.ServiceWorkerDetectionTimedOut,
+                ServiceWorkerScoreExcludingOffline = result.ServiceWorkerScore.Select(a => a.Value).Sum(),
                 ServiceWorkerDetectionTimeInMs = elapsed.TotalMilliseconds,
-                ServiceWorkerDetectionTimedOut = timedOut
             });
             this.http.PostAsync(this.settings.Value.Url, new StringContent(args))
-                .ContinueWith(_ => logger.LogInformation("Successfully sent {url} to URL logging service. Success = {success}, Error = {error}, Elapsed = {elapsed}", url, success, error, elapsed), TaskContinuationOptions.OnlyOnRanToCompletion)
+                .ContinueWith(_ => logger.LogInformation("Successfully sent {url} to URL logging service. Success = {success}, Error = {error}, Elapsed = {elapsed}", url, result.HasSW, result.NoServiceWorkerFoundDetails, elapsed), TaskContinuationOptions.OnlyOnRanToCompletion)
                 .ContinueWith(task => logger.LogError(task.Exception ?? new Exception("Unable to send URL to logging service"), "Unable to send {url} to logging service due to an error", url), TaskContinuationOptions.OnlyOnFaulted);
         }
     }

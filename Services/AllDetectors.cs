@@ -54,10 +54,24 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             // Otherwise, wait for the Puppeteer task.
             var finalResult = successfulResult ?? await puppeteerTask;
 
-            urlLogService.LogUrlResult(uri, finalResult.HasSW, finalResult.ServiceWorkerDetectionTimedOut, finalResult.NoServiceWorkerFoundDetails, stopwatch.Elapsed);
+            // Score the results.
+            finalResult.ServiceWorkerScore = GetScores(finalResult);
+
+            urlLogService.LogUrlResult(uri, finalResult, stopwatch.Elapsed);
             stopwatch.Stop();
 
             return finalResult;
+        }
+
+        private Dictionary<string, int> GetScores(ServiceWorkerDetectionResult result)
+        {
+            return new Dictionary<string, int>
+            {
+                { "hasSW", result.HasSW ? 20 : 0 },
+                { "scope", result.Scope != null ? 5 : 0 },
+                { "hasPeriodicBackgroundSync", result.HasPeriodicBackgroundSync ? 2 : 0 },
+                { "hasPushRegistration", result.HasPushRegistration ? 1 : 0 }
+            };
         }
     }
 }

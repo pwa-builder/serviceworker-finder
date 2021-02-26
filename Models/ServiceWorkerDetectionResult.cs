@@ -60,5 +60,10 @@ namespace PWABuilder.ServiceWorkerDetector.Models
         /// Whether service worker detection timed out, which typically happens when there is no service worker present.
         /// </summary>
         public bool ServiceWorkerDetectionTimedOut { get; set; }
+
+        /// <summary>
+        /// The dictionary of score values for the service worker.
+        /// </summary>
+        public Dictionary<string, int> ServiceWorkerScore { get; set; } = new Dictionary<string, int>();
     }
 }
