@@ -22,24 +22,26 @@ namespace PWABuilder.ServiceWorkerDetector.Services
     public class HtmlParseDetector
     {
         private readonly HttpClient http;
+        private readonly ServiceWorkerCodeAnalyzer swAnalyzer;
         private readonly ILogger<HtmlParseDetector> logger;
 
         private static readonly Regex swRegex = new Regex("navigator\\s*.\\s*serviceWorker\\s*.\\s*register\\(['|\"]([^'\"]+)['|\"]");
-        private static readonly Regex pushRegex = new Regex("\\.addEventListener\\(['|\"]push['|\"]\\)");
-        private const string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36 Edg/85.0.564.44";
+        private const string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.182 Safari/537.36 Edg/88.0.705.74";
         private const string serviceWorkerNameFallback = "/dynamically-generated";
         private static readonly TimeSpan httpTimeout = TimeSpan.FromSeconds(5);
 
         public HtmlParseDetector(
             IHttpClientFactory httpClientFactory,
+            ServiceWorkerCodeAnalyzer swAnalyzer,
             ILogger<HtmlParseDetector> logger)
         {
             this.http = httpClientFactory.CreateClient();
             this.http.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+            this.swAnalyzer = swAnalyzer;
             this.logger = logger;
         }
 
-        public async Task<AllChecksResult> Run(Uri uri)
+        public async Task<ServiceWorkerDetectionResult> Run(Uri uri)
         {
             try
             {
@@ -48,18 +50,14 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             catch (Exception error)
             {
                 logger.LogWarning(error, "Error running HTML parse service worker detector for {uri}", uri);
-                return new AllChecksResult
+                return new ServiceWorkerDetectionResult
                 {
-                    HasPushRegistration = false,
-                    NoServiceWorkerFoundDetails = "Error running HTML parse service worker detector: " + error.ToString(),
-                    Scope = null,
-                    ServiceWorkerDetectionTimedOut = false,
-                    Url = null
+                    NoServiceWorkerFoundDetails = "Error running HTML parse service worker detector: " + error.ToString()
                 };
             }
         }
 
-        private async Task<AllChecksResult> RunCore(Uri uri)
+        private async Task<ServiceWorkerDetectionResult> RunCore(Uri uri)
         {
             var pageHtml = await GetPageHtml(uri);
             var htmlDoc = GetDocument(pageHtml);
@@ -70,9 +68,12 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 await GetServiceWorkerUrlFromCommonFileNames(uri); // Still can't find sw reg? Take a guess at some common SW URLs.
 
             var swUri = GetAbsoluteUri(uri, swUrl);
-            return new AllChecksResult
+            var swScript = await TryGetScriptContents(swUri, CancellationToken.None) ?? string.Empty;
+            return new ServiceWorkerDetectionResult
             {
-                HasPushRegistration = await TryCheckForPushRegistration(swUri),
+                HasPushRegistration = swAnalyzer.CheckPushNotification(swScript),
+                HasBackgroundSync = swAnalyzer.CheckBackgroundSync(swScript),
+                HasPeriodicBackgroundSync = swAnalyzer.CheckPeriodicSync(swScript),
                 NoServiceWorkerFoundDetails = swUrl == null ? "Couldn't find a service worker registration via HTML parsing" : string.Empty,
                 Scope = swUrl != null ? uri : null,
                 ServiceWorkerDetectionTimedOut = false,
@@ -115,8 +116,10 @@ namespace PWABuilder.ServiceWorkerDetector.Services
 
         private async Task<string> GetPageHtml(Uri uri)
         {
-            using var http2Request = new HttpRequestMessage(HttpMethod.Get, uri);
-            http2Request.Version = new Version(2, 0);
+            using var http2Request = new HttpRequestMessage(HttpMethod.Get, uri)
+            {
+                Version = new Version(2, 0)
+            };
             using var result = await http.SendAsync(http2Request, httpTimeout, CancellationToken.None);
             if (!result.IsSuccessStatusCode)
             {
@@ -203,8 +206,13 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             return absoluteUri;
         }
 
-        private async Task<string> TryGetScriptContents(Uri scriptUri, CancellationToken cancelToken)
+        private async Task<string> TryGetScriptContents(Uri? scriptUri, CancellationToken cancelToken)
         {
+            if (scriptUri == null)
+            {
+                return string.Empty;
+            }
+
             try
             {
                 var scriptContents = await http.GetStringAsync(scriptUri, httpTimeout, cancelToken);
@@ -222,29 +230,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             }
         }
 
-        private async Task<bool> TryCheckForPushRegistration(Uri? serviceWorkerUri)
-        {
-            if (serviceWorkerUri == null)
-            {
-                return false;
-            }
-
-            try
-            {
-                var swScript = await http.GetStringAsync(serviceWorkerUri, httpTimeout, CancellationToken.None);
-                return pushRegex.IsMatch(swScript);
-            }
-            catch (TimeoutException)
-            {
-                logger.LogWarning("Unable to check service worker for push registration because the fetch of the service worker timed out");
-                return false;
-            }
-            catch (Exception scriptFetchError)
-            {
-                logger.LogWarning(scriptFetchError, "Unable to check service worker for push registration due to fetch error");
-                return false;
-            }
-        }
+        
 
         private async Task<bool> TryCheckIfExists(Uri uri, string[] acceptHeaders, CancellationToken cancelToken)
         {

@@ -33,7 +33,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         /// </summary>
         /// <param name="uri"></param>
         /// <returns></returns>
-        public async Task<AllChecksResult> Run(Uri uri)
+        public async Task<ServiceWorkerDetectionResult> Run(Uri uri)
         {
             // If it's a localhost, don't spin it up because it ain't gonna work.
             // This is in response to users attempting to run PWABuilder on localhost.

@@ -32,12 +32,12 @@ namespace PWABuilder.ServiceWorkerDetector.Controllers
         }
 
         [HttpGet]
-        public Task<AllChecksResult> RunAllChecks(Uri url)
+        public Task<ServiceWorkerDetectionResult> RunAllChecks(Uri url)
         {
             return this.allDetectors.Run(url);
         }
 
-        public async Task<AllChecksResult> EnsureServiceWorkerFound(Uri url)
+        public async Task<ServiceWorkerDetectionResult> EnsureServiceWorkerFound(Uri url)
         {
             var result = await this.puppeteerSwDetector.Run(url, cacheSuccessfulResults: false);
             if (!result.HasSW)
@@ -48,24 +48,7 @@ namespace PWABuilder.ServiceWorkerDetector.Controllers
             return result;
         }
 
-        [HttpGet]
-        public Task<Uri?> GetServiceWorkerUrl(Uri url)
-        {
-            return this.puppeteerSwDetector.GetServiceWorkerUrl(url);
-        }
-
-        [HttpGet]
-        public Task<Uri?> GetScope(Uri url)
-        {
-            return this.puppeteerSwDetector.GetScope(url);
-        }
-
-        [HttpGet]
-        public Task<bool> GetPushRegistrationStatus(Uri url)
-        {
-            return this.puppeteerSwDetector.GetPushRegistrationStatus(url);
-        }
-
+        [Obsolete("Used only for back compat with PWABuilder web site v2. V3 has it all included.")]
         [HttpGet]
         public Task<bool> GetPeriodicSyncStatus(Uri url)
         {

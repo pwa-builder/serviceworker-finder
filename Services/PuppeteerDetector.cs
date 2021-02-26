@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Polly;
 using PuppeteerSharp;
+using PWABuilder.ServiceWorkerDetector.Common;
 using PWABuilder.ServiceWorkerDetector.Models;
 using System;
 using System.Collections.Concurrent;
@@ -9,6 +10,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace PWABuilder.ServiceWorkerDetector.Services
@@ -19,22 +21,22 @@ namespace PWABuilder.ServiceWorkerDetector.Services
     public class PuppeteerDetector
     {
         private readonly ILogger<PuppeteerDetector> logger;
-        private readonly IMemoryCache successfulChecksCache;
         private readonly HttpClient http;
-        private readonly UrlLogger urlLogService;
+        private readonly ServiceWorkerCodeAnalyzer swCodeAnalyzer;
 
         private const int chromeRevision = 782078;  // 818858 has occasional hangs during navigation, we've seen with sites like messianicradio.com
         private static readonly int serviceWorkerDetectionTimeoutMs = (int)TimeSpan.FromSeconds(10).TotalMilliseconds;
-        private static readonly TimeSpan successfulCheckCacheExpiration = TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan httpTimeout = TimeSpan.FromSeconds(5);
+
 
         public PuppeteerDetector(
             ILogger<PuppeteerDetector> logger,
             IHttpClientFactory httpClientFactory,
-            IMemoryCache successfulChecksCache)
+            ServiceWorkerCodeAnalyzer swCodeAnalyzer)
         {
             this.logger = logger;
             this.http = httpClientFactory.CreateClient();
-            this.successfulChecksCache = successfulChecksCache;
+            this.swCodeAnalyzer = swCodeAnalyzer;
         }
 
         /// <summary>
@@ -42,22 +44,16 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         /// </summary>
         /// <param name="uri"></param>
         /// <returns></returns>
-        public async Task<AllChecksResult> Run(Uri uri, bool cacheSuccessfulResults = true)
+        public async Task<ServiceWorkerDetectionResult> Run(Uri uri, bool cacheSuccessfulResults = true)
         {
             try
             {
-                // Have we successfully detected this URL before? If so, return that.
-                if (successfulChecksCache.TryGetValue(uri, out AllChecksResult existingSuccessfulResult))
-                {
-                    return existingSuccessfulResult;
-                }
-
                 // First, see if we can find a service worker.
                 using var serviceWorkerDetection = await DetectServiceWorker(uri);
                 if (!serviceWorkerDetection.ServiceWorkerDetected)
                 {
                     // No service worker? Punt.
-                    return new AllChecksResult
+                    return new ServiceWorkerDetectionResult
                     {
                         ServiceWorkerDetectionTimedOut = serviceWorkerDetection.TimedOut,
                         NoServiceWorkerFoundDetails = serviceWorkerDetection.NoServiceWorkerFoundDetails
@@ -65,87 +61,26 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 }
 
                 var swScope = await TryGetScope(serviceWorkerDetection.Page, uri);
-                var swHasPushReg = await TryCheckPushRegistration(serviceWorkerDetection.Page, uri);
+                var swContents = await TryGetScriptContents(serviceWorkerDetection.Worker.Uri, CancellationToken.None);
                 this.logger.LogInformation("Successfully detected service worker for {uri}", uri);
-                var result = new AllChecksResult
+                return new ServiceWorkerDetectionResult
                 {
                     Url = serviceWorkerDetection.Worker.Uri,
                     Scope = swScope,
-                    HasPushRegistration = swHasPushReg
+                    HasPushRegistration = await TryCheckPushRegistration(serviceWorkerDetection.Page, uri) || swCodeAnalyzer.CheckPushNotification(swContents),
+                    HasBackgroundSync = swCodeAnalyzer.CheckBackgroundSync(swContents),
+                    HasPeriodicBackgroundSync = swCodeAnalyzer.CheckPeriodicSync(swContents)
                 };
-
-                // Add it to the cache of successful detections.
-                if (cacheSuccessfulResults && result.Url != null)
-                {
-                    successfulChecksCache.Set(uri, result, successfulCheckCacheExpiration);
-                }
-
-                return result;
             }
             catch (Exception error)
             {
                 logger.LogError(error, "Error running all checks for {url}", uri);
                 var isTimeout = error is TimeoutException || error is Polly.Timeout.TimeoutRejectedException || error.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase);
-                return new AllChecksResult
+                return new ServiceWorkerDetectionResult
                 {
-                    HasPushRegistration = false,
                     NoServiceWorkerFoundDetails = "Error during Puppeteer service worker detection. " + error.Message,
-                    Scope = null,
-                    ServiceWorkerDetectionTimedOut = isTimeout,
-                    Url = null
+                    ServiceWorkerDetectionTimedOut = isTimeout
                 };
-            }
-        }
-
-        public async Task<Uri?> GetServiceWorkerUrl(Uri uri)
-        {
-            try
-            {
-                using var detectionResult = await DetectServiceWorker(uri);
-                return detectionResult.Worker?.Uri;
-            }
-            catch (Exception serviceWorkerError)
-            {
-                logger.LogError(serviceWorkerError, "Error running service worker check for {url}", uri);
-                throw;
-            }
-        }
-
-        public async Task<Uri?> GetScope(Uri uri)
-        {
-            try
-            {
-                using var detectionResults = await DetectServiceWorker(uri);
-                if (!detectionResults.ServiceWorkerDetected)
-                {
-                    throw new InvalidOperationException("Couldn't fetch scope because no service worker was detected: " + detectionResults.NoServiceWorkerFoundDetails);
-                }
-
-                return await GetScope(detectionResults.Page, uri);
-            }
-            catch (Exception scopeCheckError)
-            {
-                logger.LogError(scopeCheckError, "Error running getting scope for {url}", uri);
-                throw;
-            }
-        }
-
-        public async Task<bool> GetPushRegistrationStatus(Uri uri)
-        {
-            try
-            {
-                using var detectionResults = await DetectServiceWorker(uri);
-                if (!detectionResults.ServiceWorkerDetected)
-                {
-                    throw new InvalidOperationException("Couldn't fetch push registration because no service worker was detected: " + detectionResults.NoServiceWorkerFoundDetails);
-                }
-
-                return await CheckPushRegistration(detectionResults.Page);
-            }
-            catch (Exception pushRegCheckError)
-            {
-                logger.LogError(pushRegCheckError, "Error running push registration check for {url}", uri);
-                throw;
             }
         }
 
@@ -187,6 +122,44 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             return page.EvaluateExpressionAsync<bool>("navigator.serviceWorker.getRegistration().then(swReg => swReg.pushManager.getSubscription()).then(pushReg => pushReg != null)");
         }
 
+        private async Task<string> TryGetScriptContents(Uri? scriptUri, CancellationToken cancelToken)
+        {
+            if (scriptUri == null)
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                return await http.GetStringAsync(scriptUri, httpTimeout, cancelToken);
+            }
+            catch (TimeoutException)
+            {
+                logger.LogWarning("Cancelled fetch of script {url} because it took too long.");
+                return string.Empty;
+            }
+            catch (Exception fetchError)
+            {
+                logger.LogWarning(fetchError, "Unable to load script contents due to error. Script was at {src}", scriptUri);
+                return string.Empty;
+            }
+        }
+
+        private async Task<bool> TryCheckBackgroundSync(Page page, Uri uri)
+        {
+            try
+            {
+                return await page.EvaluateExpressionAsync<bool>("navigator.serviceWorker.getRegistration().then(swReg => swReg.pushManager.getSubscription()).then(pushReg => pushReg != null)");
+            }
+            catch (Exception pushRegError)
+            {
+                logger.LogWarning(pushRegError, "Error fetching push registration for {url}", uri);
+                return false;
+            }
+        }
+
+
+
         private async Task<Uri?> TryGetScope(Page page, Uri uri)
         {
             try
@@ -218,7 +191,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             return null;
         }
 
-        private async Task<ServiceWorkerDetectionResults> GetServiceWorkerUrl(Browser browser, Page page)
+        private async Task<ServiceWorkerExistsResult> GetServiceWorkerUrl(Browser browser, Page page)
         {
             try
             {
@@ -226,22 +199,22 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 var serviceWorkerTarget = await WaitForServiceWorkerAsync(browser, page);
                 if (serviceWorkerTarget == null)
                 {
-                    return new ServiceWorkerDetectionResults("Couldn't find service worker", false, page, browser);
+                    return new ServiceWorkerExistsResult("Couldn't find service worker", false, page, browser);
                 }
                 if (!Uri.TryCreate(serviceWorkerTarget.Url, UriKind.Absolute, out var serviceWorkerUrl))
                 {
-                    return new ServiceWorkerDetectionResults($"Unable to parse service worker URL into absolute URI. Raw service worker URL was {serviceWorkerTarget.Url}", false, page, browser);
+                    return new ServiceWorkerExistsResult($"Unable to parse service worker URL into absolute URI. Raw service worker URL was {serviceWorkerTarget.Url}", false, page, browser);
                 }
 
-                return new ServiceWorkerDetectionResults(new ServiceWorkerDetails(serviceWorkerTarget, serviceWorkerUrl), page, browser);
+                return new ServiceWorkerExistsResult(new ServiceWorkerDetails(serviceWorkerTarget, serviceWorkerUrl), page, browser);
             }
             catch (Exception timeoutError) when (timeoutError is TimeoutException or Polly.Timeout.TimeoutRejectedException)
             {
-                return new ServiceWorkerDetectionResults("No service worker detected within alloted timeout of " + TimeSpan.FromMilliseconds(serviceWorkerDetectionTimeoutMs).ToString(), true, page, browser);
+                return new ServiceWorkerExistsResult("No service worker detected within alloted timeout of " + TimeSpan.FromMilliseconds(serviceWorkerDetectionTimeoutMs).ToString(), true, page, browser);
             }
             catch (Exception error)
             {
-                return new ServiceWorkerDetectionResults(error.Message, false, page, browser);
+                return new ServiceWorkerExistsResult(error.Message, false, page, browser);
             }
         }
 
@@ -320,7 +293,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             return browserFetchResult;
         }
 
-        private async Task<ServiceWorkerDetectionResults> DetectServiceWorker(Uri uri)
+        private async Task<ServiceWorkerExistsResult> DetectServiceWorker(Uri uri)
         {
             var chromeInfo = await DownloadChromeRevision();
             var browser = await CreateBrowser(chromeInfo);
@@ -331,7 +304,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             }
             catch (Polly.Timeout.TimeoutRejectedException)
             {
-                return new ServiceWorkerDetectionResults("Navigation didn't complete within alloted timeout of " + TimeSpan.FromMilliseconds(serviceWorkerDetectionTimeoutMs).ToString(), true, null, browser);
+                return new ServiceWorkerExistsResult("Navigation didn't complete within alloted timeout of " + TimeSpan.FromMilliseconds(serviceWorkerDetectionTimeoutMs).ToString(), true, null, browser);
             }
             catch
             {
@@ -339,7 +312,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 throw;
             }
 
-            ServiceWorkerDetectionResults workerDetection;
+            ServiceWorkerExistsResult workerDetection;
             try
             {
                 workerDetection = await GetServiceWorkerUrl(browser, page);

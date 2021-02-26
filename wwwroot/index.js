@@ -92,18 +92,24 @@ function showErrorForRow(row, errorDetails, duration) {
 
     row.children[0].innerHTML = `<i class="fas fa-check"></i>`;
     row.children[2].innerHTML = `<i class="fas fa-times text-danger"></i>`;
-    row.children[3].innerHTML = `<button class="btn btn-danger btn-sm" onclick="showError(${rowErrors.length - 1})">Show error</button>`;
-    row.children[4].innerText = duration;
+    row.children[3].innerHTML = "";
+    row.children[4].innerHTML = "";
+    row.children[5].innerHTML = "";
+    row.children[6].innerHTML = `<button class="btn btn-danger btn-sm" onclick="showError(${rowErrors.length - 1})">Show error</button>`;
+    row.children[7].innerText = duration;
     
     console.warn("Showing error for row", row, errorDetails);
 }
 
 function showSuccessForRow(row, resultsJson, duration) {
     removeRowActive(row);
-    row.children[0].innerHTML = `<i class="fas fa-check"></i>`;
-    row.children[2].innerHTML = `<i class="fas fa-check-circle text-success"></i><br><span>${resultsJson.url}</span>`;
-    row.children[3].innerText = "";
-    row.children[4].innerText = duration;
+    row.children[0].innerHTML = `<i class="fas fa-check"></i>`; // success/fail cell
+    row.children[2].innerHTML = `<i class="fas fa-check-circle text-success"></i><br><span>${resultsJson.url}</span>`; // sw url cell
+    row.children[3].innerHTML = resultsJson.hasPushRegistration ? `<i class="fas fa-check-circle text-success"></i>` : `<i class="fas fa-times text-warning"></i>`; // push reg cell
+    row.children[4].innerHTML = resultsJson.hasBackgroundSync ? `<i class="fas fa-check-circle text-success"></i>` : `<i class="fas fa-times text-warning"></i>`; // background sync cell
+    row.children[5].innerHTML = resultsJson.hasPeriodicBackgroundSync ? `<i class="fas fa-check-circle text-success"></i>` : `<i class="fas fa-times text-warning"></i>`; // periodic sync cell
+    row.children[6].innerText = ""; // error cell
+    row.children[7].innerText = duration;
     console.info("Showing success for row", row, resultsJson);
 }
 
@@ -130,15 +136,19 @@ function setRowActive(row) {
 
 function createRow(site) {
     const row = document.createElement("tr");
+
     const statusCell = document.createElement("th");
     const siteCell = document.createElement("td");
     const swDetectedCell = document.createElement("td");
+    const pushRegCell = document.createElement("td");
+    const backgroundSyncCell = document.createElement("td");
+    const periodicSyncCell = document.createElement("td");
     const errorDetailsCell = document.createElement("td");
     const durationCell = document.createElement("td");
 
     siteCell.innerText = site;
 
-    row.append(statusCell, siteCell, swDetectedCell, errorDetailsCell, durationCell);
+    row.append(statusCell, siteCell, swDetectedCell, pushRegCell, backgroundSyncCell, periodicSyncCell, errorDetailsCell, durationCell);
     return row;
 }
 

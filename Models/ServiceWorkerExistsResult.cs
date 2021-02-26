@@ -4,16 +4,16 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace PWABuilder.ServiceWorkerDetector.Models
 {
-    public class ServiceWorkerDetectionResults : IDisposable
+    public class ServiceWorkerExistsResult : IDisposable
     {
-        public ServiceWorkerDetectionResults(ServiceWorkerDetails worker, Page page, Browser browser)
+        public ServiceWorkerExistsResult(ServiceWorkerDetails worker, Page page, Browser browser)
         {
             this.Worker = worker;
             this.Page = page;
             this.Browser = browser;
         }
 
-        public ServiceWorkerDetectionResults(string notFoundDetails, bool timedOut, Page? page, Browser browser)
+        public ServiceWorkerExistsResult(string notFoundDetails, bool timedOut, Page? page, Browser browser)
         {
             this.NoServiceWorkerFoundDetails = notFoundDetails;
             this.TimedOut = timedOut;

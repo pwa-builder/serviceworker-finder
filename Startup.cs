@@ -36,6 +36,7 @@ namespace PWABuilder.ServiceWorkerDetector
             services.AddTransient<HtmlParseDetector>();
             services.AddTransient<AllDetectors>();
             services.AddTransient<UrlLogger>();
+            services.AddTransient<ServiceWorkerCodeAnalyzer>();
             services.AddHostedService<ZombieChromiumKiller>();
             services.AddHttpClient();
             services.AddMemoryCache(); // 50MB max size
