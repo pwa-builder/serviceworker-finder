@@ -6,6 +6,7 @@ using PWABuilder.ServiceWorkerDetector.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -59,15 +60,15 @@ namespace PWABuilder.ServiceWorkerDetector.Services
 
         private async Task<ServiceWorkerDetectionResult> RunCore(Uri uri)
         {
-            var pageHtml = await GetPageHtml(uri);
+            var (pageHtml, canonicalUri) = await GetPageHtml(uri);
             var htmlDoc = GetDocument(pageHtml);
 
             // Find the service worker inside the HTML of the page.
-            var swUrl = await GetServiceWorkerUrlFromDoc(uri, htmlDoc) ??
-                await GetServiceWorkerUrlFromScripts(uri, htmlDoc) ?? // Can't find sw reg in the HTML doc? Search its scripts.
-                await GetServiceWorkerUrlFromCommonFileNames(uri); // Still can't find sw reg? Take a guess at some common SW URLs.
+            var swUrl = await GetServiceWorkerUrlFromDoc(canonicalUri, htmlDoc) ??
+                await GetServiceWorkerUrlFromScripts(canonicalUri, htmlDoc) ?? // Can't find sw reg in the HTML doc? Search its scripts.
+                await GetServiceWorkerUrlFromCommonFileNames(canonicalUri); // Still can't find sw reg? Take a guess at some common SW URLs.
 
-            var swUri = GetAbsoluteUri(uri, swUrl);
+            var swUri = GetAbsoluteUri(canonicalUri, swUrl);
             var swScript = await TryGetScriptContents(swUri, CancellationToken.None) ?? string.Empty;
             return new ServiceWorkerDetectionResult
             {
@@ -75,7 +76,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 HasBackgroundSync = swAnalyzer.CheckBackgroundSync(swScript),
                 HasPeriodicBackgroundSync = swAnalyzer.CheckPeriodicSync(swScript),
                 NoServiceWorkerFoundDetails = swUrl == null ? "Couldn't find a service worker registration via HTML parsing" : string.Empty,
-                Scope = swUrl != null ? uri : null,
+                Scope = swUrl != null ? canonicalUri : null,
                 ServiceWorkerDetectionTimedOut = false,
                 Url = swUri
             };
@@ -114,13 +115,32 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             return serviceWorkerUrl;
         }
 
-        private async Task<string> GetPageHtml(Uri uri)
+        private async Task<(string contents, Uri canonicalUri)> GetPageHtml(Uri uri, bool followRedirect = true)
         {
             using var http2Request = new HttpRequestMessage(HttpMethod.Get, uri)
             {
                 Version = new Version(2, 0)
             };
+
             using var result = await http.SendAsync(http2Request, httpTimeout, CancellationToken.None);
+
+            // First, check if it's a redirect. If so try again with the right URL.
+            if (followRedirect)
+            {
+                var isRedirect = new[]
+                {
+                    HttpStatusCode.Redirect,
+                    HttpStatusCode.PermanentRedirect,
+                    HttpStatusCode.TemporaryRedirect,
+                    HttpStatusCode.Moved
+                }.Any(code => result.StatusCode == code);
+                if (isRedirect && result.Headers.Location != null)
+                {
+                    logger.LogWarning("Fetching {initialUrl} resulted in a redirect to {url}", uri, result.Headers.Location);
+                    return await GetPageHtml(result.Headers.Location, false); // passing false here: we don't follow redirect recursively in case of infinite redirects.
+                }
+            }
+
             if (!result.IsSuccessStatusCode)
             {
                 logger.LogWarning("Unable to fetch page HTML due to HTTP {code}. Reason: {statusText}", result.StatusCode, result.ReasonPhrase);
@@ -129,7 +149,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
 
             var contentString = await result.Content.ReadAsStringAsync();
             logger.LogInformation("Successfully fetched {url} via HTML parsing", uri);
-            return contentString;
+            return (contentString, uri);
         }
 
         private HtmlDocument GetDocument(string pageHtml)
@@ -270,10 +290,23 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 "/superpwa-sw.js",
                 "/ngsw-worker.js",
                 "/sw-amp.js",
+                "/pwa-sw.js",
                 "/firebase-messaging-sw.js",
                 "/pwabuilder-sw.js",
                 "/serviceworker"
             };
+
+            // If there's a LocalPath (https://www.hulu.com/app has /app as the LocalPath),
+            // then also try these common swFileNames with that local path.
+            // Without this, https://www.hulu.com/app will try for https://www.hulu.com/sw.js (missing the /app part).
+            if (uri.LocalPath != "/")
+            {
+                var localPathFileNames = commonSwFileNames
+                    .Select(f => uri.LocalPath.TrimEnd('/') + f);
+                commonSwFileNames = localPathFileNames
+                    .Concat(commonSwFileNames)
+                    .ToArray();
+            }
 
             var commonSwFileNamesWithUrls = commonSwFileNames
                 .Select(fileName => new
