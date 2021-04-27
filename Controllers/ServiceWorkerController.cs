@@ -48,11 +48,17 @@ namespace PWABuilder.ServiceWorkerDetector.Controllers
             return result;
         }
 
-        [Obsolete("Used only for back compat with PWABuilder web site v2. V3 has it all included.")]
+        [Obsolete("Used only for back compat with PWABuilder web site v2. V3 has it all included in the RunAllChecks result.")]
         [HttpGet]
         public Task<bool> GetPeriodicSyncStatus(Uri url)
         {
             return this.puppeteerSwDetector.GetPeriodicSyncStatus(url);
+        }
+
+        [HttpGet]
+        public Task<bool> GetOfflineSupport(Uri url)
+        {
+            return this.puppeteerSwDetector.GetOfflineSupport(url);
         }
     }
 }

@@ -24,7 +24,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         private readonly HttpClient http;
         private readonly ServiceWorkerCodeAnalyzer swCodeAnalyzer;
 
-        private const int chromeRevision = 782078;  // 818858 has occasional hangs during navigation, we've seen with sites like messianicradio.com
+        private const int chromeRevision = 869685;  // 818858 has occasional hangs during navigation, we've seen with sites like messianicradio.com. Each build of Puppeteer uses a specific Chromium version. See https://github.com/puppeteer/puppeteer/releases for which version of Chromium should work. Check Puppeteer-Sharp's default Chromium version: https://github.com/hardkoded/puppeteer-sharp/blob/master/lib/PuppeteerSharp/BrowserFetcher.cs
         private static readonly int serviceWorkerDetectionTimeoutMs = (int)TimeSpan.FromSeconds(10).TotalMilliseconds;
         private static readonly TimeSpan httpTimeout = TimeSpan.FromSeconds(5);
 
@@ -101,6 +101,31 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             {
                 logger.LogError(pushRegCheckError, "Error running periodicsync check for {serviceWorkerUrl}", uri);
                 throw;
+            }
+        }
+
+        public async Task<bool> GetOfflineSupport(Uri uri)
+        {
+            // Service worker without offline support: https://pwa-sw-empty-fetch.glitch.me
+            // Service worker with offline support: https://pwa-sw-offline.glitch.me, https://webboard.app, https://messianicradio.com, https://weather.com
+
+            using var detectionResults = await DetectServiceWorker(uri);
+            if (!detectionResults.ServiceWorkerDetected)
+            {
+                logger.LogInformation("Unable to detect offline support because the service worker wasn't detected. {0}", detectionResults.NoServiceWorkerFoundDetails);
+                return false;
+            }
+
+            try
+            {
+                await detectionResults.Page.SetOfflineModeAsync(true);
+                var reloadResponse = await detectionResults.Page.ReloadAsync(PuppeteerDetector.serviceWorkerDetectionTimeoutMs, new[] { WaitUntilNavigation.Networkidle2 });
+                return reloadResponse?.Ok == true;
+            }
+            catch (Exception error)
+            {
+                logger.LogError(error, "Unable to detect offline support because Puppeteer threw an exception.");
+                return false;
             }
         }
 
@@ -231,7 +256,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         private async Task<Page> GoToPage(Uri uri, Browser browser)
         {
             var retryOnNavigationErrorPolicy = Policy
-                .Handle<NavigationException>(err => err.Message.Contains("Page failed to process Inspector.targetCrashed")) // We've noticed some sites, like messianicradio.com, will occasionally cause this error. When it happens, try again, cause it usually succeeds.
+                .Handle<NavigationException>(err => err.Message.Contains("Page failed to process Inspector.targetCrashed")) // We've noticed some sites, like messianicradio.com, will occasionally cause this error. When it happens, try again, because it usually succeeds.
                 .Retry();
 
             return await retryOnNavigationErrorPolicy.Execute(async () =>
