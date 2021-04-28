@@ -24,7 +24,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         private readonly HttpClient http;
         private readonly ServiceWorkerCodeAnalyzer swCodeAnalyzer;
 
-        private const int chromeRevision = 869685;  // 818858 has occasional hangs during navigation, we've seen with sites like messianicradio.com. Each build of Puppeteer uses a specific Chromium version. See https://github.com/puppeteer/puppeteer/releases for which version of Chromium should work. Check Puppeteer-Sharp's default Chromium version: https://github.com/hardkoded/puppeteer-sharp/blob/master/lib/PuppeteerSharp/BrowserFetcher.cs
+        private const int chromeRevision = 869685;  // Each build of Puppeteer uses a specific Chromium version. See https://github.com/puppeteer/puppeteer/releases for which version of Chromium should work. Check Puppeteer-Sharp's default Chromium version: https://github.com/hardkoded/puppeteer-sharp/blob/master/lib/PuppeteerSharp/BrowserFetcher.cs
         private static readonly int serviceWorkerDetectionTimeoutMs = (int)TimeSpan.FromSeconds(10).TotalMilliseconds;
         private static readonly TimeSpan httpTimeout = TimeSpan.FromSeconds(5);
 
@@ -107,7 +107,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         public async Task<bool> GetOfflineSupport(Uri uri)
         {
             // Service worker without offline support: https://pwa-sw-empty-fetch.glitch.me
-            // Service worker with offline support: https://pwa-sw-offline.glitch.me, https://webboard.app, https://messianicradio.com, https://weather.com
+            // Service worker with offline support: https://pwa-sw-offline.glitch.me, https://webboard.app, https://messianicradio.com, https://flashmath.cards
 
             using var detectionResults = await DetectServiceWorker(uri);
             if (!detectionResults.ServiceWorkerDetected)
@@ -118,13 +118,38 @@ namespace PWABuilder.ServiceWorkerDetector.Services
 
             try
             {
-                await detectionResults.Page.SetOfflineModeAsync(true);
-                var reloadResponse = await detectionResults.Page.ReloadAsync(PuppeteerDetector.serviceWorkerDetectionTimeoutMs, new[] { WaitUntilNavigation.Networkidle2 });
-                return reloadResponse?.Ok == true;
+                // First, reload the page. This is necessary because service workers are often registered on an already-served page, so they might not be in the cache.
+                await detectionResults.Page.ReloadAsync(serviceWorkerDetectionTimeoutMs, new[] { WaitUntilNavigation.Networkidle0 });
+
+                // See if we have HTML in the cache. If so, we'll deem it offline-capable.
+                // This is more resilient than futzing with offline mode and refreshing pages, which is fraught with race conditions.
+                var isHtmlInCache = await detectionResults.Page.EvaluateExpressionAsync<bool>(@"
+                    async function isHtmlInCache() {
+                        const cacheNames = await caches.keys();
+                        for (let cacheName of cacheNames) {
+                            const cache = await caches.open(cacheName);
+                            const cacheKeys = await cache.keys();
+                            for (let key of cacheKeys) {
+                                const cachedObject = await cache.match(key);
+                                if (cachedObject && cachedObject.headers) {
+                                    const contentType = cachedObject.headers.get('Content-Type');
+                                    if (contentType && contentType.startsWith('text/html')) {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+
+                        return false;
+                    }
+
+                    isHtmlInCache();
+                ");
+                return isHtmlInCache;
             }
-            catch (Exception error)
+            catch (Exception evalError)
             {
-                logger.LogError(error, "Unable to detect offline support because Puppeteer threw an exception.");
+                logger.LogError(evalError, "Unable to determine offline support due to evaluation error");
                 return false;
             }
         }
@@ -290,7 +315,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             // So, insurance policy using Polly's pessimistic strategy, which spins up a thread and monitors the result.
             var timeoutPolicy = Policy
                 .TimeoutAsync(TimeSpan.FromMilliseconds(serviceWorkerDetectionTimeoutMs), Polly.Timeout.TimeoutStrategy.Pessimistic);
-            return await timeoutPolicy.ExecuteAsync(async () => await page.GoToAsync(uri.ToString(), serviceWorkerDetectionTimeoutMs));
+            return await timeoutPolicy.ExecuteAsync(async () => await page.GoToAsync(uri.ToString(), serviceWorkerDetectionTimeoutMs, new[] { WaitUntilNavigation.Load }));
         }
 
         private async Task<Browser> CreateBrowser(RevisionInfo chromeInfo)
@@ -300,7 +325,11 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 Timeout = serviceWorkerDetectionTimeoutMs,
                 Headless = true,
                 ExecutablePath = chromeInfo.ExecutablePath,
-                Args = new[] { " --lang=en-US" } // needed, as some sites append culture-specific service workers
+                Args = new[] 
+                { 
+                    " --lang=en-US", // needed, as some sites append culture-specific service workers
+                    "about:blank" // otherwise google.com loads by default, slowing things down.
+                } 
             });
             browser.DefaultWaitForTimeout = serviceWorkerDetectionTimeoutMs;
             return browser;
