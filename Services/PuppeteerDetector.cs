@@ -23,20 +23,22 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         private readonly ILogger<PuppeteerDetector> logger;
         private readonly HttpClient http;
         private readonly ServiceWorkerCodeAnalyzer swCodeAnalyzer;
+        private readonly AnalyticsService analyticsService;
 
         private const int chromeRevision = 869685;  // Each build of Puppeteer uses a specific Chromium version. See https://github.com/puppeteer/puppeteer/releases for which version of Chromium should work. Check Puppeteer-Sharp's default Chromium version: https://github.com/hardkoded/puppeteer-sharp/blob/master/lib/PuppeteerSharp/BrowserFetcher.cs
         private static readonly int serviceWorkerDetectionTimeoutMs = (int)TimeSpan.FromSeconds(10).TotalMilliseconds;
         private static readonly TimeSpan httpTimeout = TimeSpan.FromSeconds(5);
 
-
         public PuppeteerDetector(
             ILogger<PuppeteerDetector> logger,
             IHttpClientFactory httpClientFactory,
-            ServiceWorkerCodeAnalyzer swCodeAnalyzer)
+            ServiceWorkerCodeAnalyzer swCodeAnalyzer,
+            AnalyticsService analyticsService)
         {
             this.logger = logger;
             this.http = httpClientFactory.CreateClient();
             this.swCodeAnalyzer = swCodeAnalyzer;
+            this.analyticsService = analyticsService;
         }
 
         /// <summary>
@@ -145,6 +147,8 @@ namespace PWABuilder.ServiceWorkerDetector.Services
 
                     isHtmlInCache();
                 ");
+                
+                analyticsService.LogOfflineResult(uri, isHtmlInCache);
                 return isHtmlInCache;
             }
             catch (Exception evalError)

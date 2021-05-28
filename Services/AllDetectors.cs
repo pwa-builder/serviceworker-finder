@@ -16,12 +16,12 @@ namespace PWABuilder.ServiceWorkerDetector.Services
     {
         private readonly HtmlParseDetector htmlParseDetector;
         private readonly PuppeteerDetector puppeteerDetector;
-        private readonly UrlLogger urlLogService;
+        private readonly AnalyticsService urlLogService;
 
         public AllDetectors(
             HtmlParseDetector htmlParseDetector, 
             PuppeteerDetector puppeteerDetector,
-            UrlLogger urlLogService)
+            AnalyticsService urlLogService)
         {
             this.htmlParseDetector = htmlParseDetector;
             this.puppeteerDetector = puppeteerDetector;

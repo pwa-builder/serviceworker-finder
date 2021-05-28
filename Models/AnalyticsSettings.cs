@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace PWABuilder.ServiceWorkerDetector.Models
 {
-    public class UrlLoggerApiSettings
+    public class AnalyticsSettings
     {
         public Uri? Url { get; set; }
     }

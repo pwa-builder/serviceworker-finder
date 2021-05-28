@@ -29,13 +29,13 @@ namespace PWABuilder.ServiceWorkerDetector
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.Configure<UrlLoggerApiSettings>(Configuration.GetSection("UrlLoggerApi"));
+            services.Configure<AnalyticsSettings>(Configuration.GetSection("AnalyticsSettings"));
 
             services.AddControllers();
             services.AddTransient<PuppeteerDetector>();
             services.AddTransient<HtmlParseDetector>();
             services.AddTransient<AllDetectors>();
-            services.AddTransient<UrlLogger>();
+            services.AddTransient<AnalyticsService>();
             services.AddTransient<ServiceWorkerCodeAnalyzer>();
             services.AddHostedService<ZombieChromiumKiller>();
             services.AddHttpClient();

@@ -65,8 +65,15 @@ namespace PWABuilder.ServiceWorkerDetector.Services
 
             // Find the service worker inside the HTML of the page.
             var swUrl = await GetServiceWorkerUrlFromDoc(canonicalUri, htmlDoc) ??
-                await GetServiceWorkerUrlFromScripts(canonicalUri, htmlDoc) ?? // Can't find sw reg in the HTML doc? Search its scripts.
+                await GetServiceWorkerUrlFromScripts(canonicalUri, htmlDoc); // Can't find sw reg in the HTML doc? Search its scripts.
+
+            // If we found a service worker registration, but couldn't find the real name of the service worker,
+            // see if we can tease it out from common names.
+            // NOTE: we can do this ONLY if we find a registration. Otherwise, we get false positives, e.g. https://msn.com/service-worker.js - even though MSN has no service worker registration.
+            if (swUrl == serviceWorkerNameFallback)
+            {
                 await GetServiceWorkerUrlFromCommonFileNames(canonicalUri); // Still can't find sw reg? Take a guess at some common SW URLs.
+            }
 
             var swUri = GetAbsoluteUri(canonicalUri, swUrl);
             var swScript = await TryGetScriptContents(swUri, CancellationToken.None) ?? string.Empty;
@@ -189,7 +196,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             }
 
             var regMatch = swRegex.Match(input);
-            if (regMatch.Success || input.Contains("navigator.serviceWorker.register(", StringComparison.InvariantCulture))
+            if (regMatch.Success || (input.Contains("navigator.serviceWorker.register(", StringComparison.InvariantCulture) && !input.Contains("navigator.serviceWorker.register()", StringComparison.InvariantCulture)))
             {
                 // See if we can extract the service worker URL
                 var urlGroup = regMatch.Groups.Cast<Group>().ElementAtOrDefault(1);
