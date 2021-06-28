@@ -21,18 +21,24 @@ namespace PWABuilder.ServiceWorkerDetector.Services
     {
         private static readonly Regex[] pushRegexes = new[]
         {
-            new Regex("\\.addEventListener\\(['|\"]push['|\"]"),
-            new Regex("\\.onpush\\s*=")
+            new Regex("\\.addEventListener\\(['|\"]push['|\"]"), // .addEventListener('push') or .addEventListener("push")
+            new Regex("\n\\s*addEventListener\\(['|\"]push['|\"]"), // [new line] addEventListener('push')
+            new Regex("\\.onpush\\s*="), // self.onpush = ...
+            new Regex("\n\\s*onpush\\s*=") // [new line] onpush = ...
         };
         private static readonly Regex[] periodicSyncRegexes = new[]
         {
             new Regex("\\.addEventListener\\(['|\"]periodicsync['|\"]"), // .addEventListener("periodicsync") and .addEventListener('periodicsync'),
-            new Regex("\\.onperiodicsync\\s*=") // self.onperiodicsync = ...
+            new Regex("\n\\s*addEventListener\\(['|\"]periodicsync['|\"]"), // addEventListener('periodicsync') at the beginning of a line (or at the beginning of a line after zero or more whitespace). See https://github.com/pwa-builder/PWABuilder/issues/1863
+            new Regex("\\.onperiodicsync\\s*="), // self.onperiodicsync = ...
+            new Regex("\n\\s*onperiodicsync\\s*=") // onperiodicsync = ...
         };
         private static readonly Regex[] backgroundSyncRegexes = new[]
         {
             new Regex("\\.addEventListener\\(['|\"]sync['|\"]"), // .addEventListener("sync") and .addEventListener('sync')
+            new Regex("\n\\s*addEventListener\\(['|\"]sync['|\"]"), // [new line] addEventListener('sync')
             new Regex("\\.onsync\\s*="), // self.onsync = function(...)
+            new Regex("\n\\s*onsync\\s*="), // [new line] onsync = function(...)
             new Regex("BackgroundSyncPlugin") // new workbox.backgroundSync.BackgroundSyncPlugin(...)
         };
 
