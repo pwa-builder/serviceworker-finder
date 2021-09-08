@@ -74,7 +74,8 @@ namespace PWABuilder.ServiceWorkerDetector
                 "https://localhost:3000",
                 "http://localhost:3000",
                 "http://localhost:8000",
-                "https://localhost:8000"
+                "https://localhost:8000",
+                "https://pwabuilder-ag.com"
             };
             var allowedWildcardOrigins = new[]
             {
