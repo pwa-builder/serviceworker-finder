@@ -27,7 +27,6 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         private readonly ILogger<HtmlParseDetector> logger;
 
         private static readonly Regex swRegex = new Regex("navigator\\s*.\\s*serviceWorker\\s*.\\s*register\\(['|\"]([^'\"]+)['|\"]");
-        private const string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.182 Safari/537.36 Edg/88.0.705.74";
         private const string serviceWorkerNameFallback = "/dynamically-generated";
         private static readonly TimeSpan httpTimeout = TimeSpan.FromSeconds(5);
 
@@ -36,8 +35,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             ServiceWorkerCodeAnalyzer swAnalyzer,
             ILogger<HtmlParseDetector> logger)
         {
-            this.http = httpClientFactory.CreateClient();
-            this.http.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+            this.http = httpClientFactory.CreateClientWithUserAgent();
             this.swAnalyzer = swAnalyzer;
             this.logger = logger;
         }

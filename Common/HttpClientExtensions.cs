@@ -10,6 +10,20 @@ namespace PWABuilder.ServiceWorkerDetector.Common
 {
     public static class HttpClientExtensions
     {
+        private const string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36 Edg/96.0.1054.57 PWABuilderHttpAgent"; // Note: this should include PWABuilderHttpAgent, as Cloudflare has whitelisted this UA
+
+        /// <summary>
+        /// Creates an HttpClient with PWABuilder's user agent.
+        /// </summary>
+        /// <param name="factory"></param>
+        /// <returns></returns>
+        public static HttpClient CreateClientWithUserAgent(this IHttpClientFactory factory)
+        {
+            var client = factory.CreateClient();
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+            return client;
+        }
+
         /// <summary>
         /// Does an HTTP GET with a specified timeout.
         /// </summary>

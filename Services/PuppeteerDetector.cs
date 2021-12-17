@@ -36,7 +36,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             AnalyticsService analyticsService)
         {
             this.logger = logger;
-            this.http = httpClientFactory.CreateClient();
+            this.http = httpClientFactory.CreateClientWithUserAgent();
             this.swCodeAnalyzer = swCodeAnalyzer;
             this.analyticsService = analyticsService;
         }
