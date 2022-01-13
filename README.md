@@ -1,3 +1,5 @@
+Please use our [main repository for any issues/bugs/features suggestion](https://github.com/pwa-builder/PWABuilder/issues/new/choose).
+
 # PWABuilder Service Worker Finder
 .NET solution that uses Puppeteer (headless Chrome) to find a service worker from a given URL
 
