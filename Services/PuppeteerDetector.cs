@@ -26,7 +26,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         private readonly AnalyticsService analyticsService;
 
         private const int chromeRevision = 869685;  // Each build of Puppeteer uses a specific Chromium version. See https://github.com/puppeteer/puppeteer/releases for which version of Chromium should work. Check Puppeteer-Sharp's default Chromium version: https://github.com/hardkoded/puppeteer-sharp/blob/master/lib/PuppeteerSharp/BrowserFetcher.cs
-        private static readonly int serviceWorkerDetectionTimeoutMs = (int)TimeSpan.FromSeconds(10).TotalMilliseconds;
+        private static readonly int serviceWorkerDetectionTimeoutMs = (int)TimeSpan.FromSeconds(20).TotalMilliseconds;
         private static readonly TimeSpan httpTimeout = TimeSpan.FromSeconds(5);
 
         public PuppeteerDetector(
@@ -357,8 +357,8 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             var browser = await CreateBrowser(chromeInfo);
             Page page;
             try
-            {
-                page = await GoToPage(uri, browser);
+            {          
+                page = await GoToPage(uri, browser);              
             }
             catch (Polly.Timeout.TimeoutRejectedException)
             {
@@ -369,7 +369,6 @@ namespace PWABuilder.ServiceWorkerDetector.Services
                 browser.Dispose();
                 throw;
             }
-
             ServiceWorkerExistsResult workerDetection;
             try
             {
