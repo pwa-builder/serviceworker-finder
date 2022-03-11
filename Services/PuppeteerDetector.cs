@@ -26,7 +26,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
         private readonly AnalyticsService analyticsService;
 
         private const int chromeRevision = 869685;  // Each build of Puppeteer uses a specific Chromium version. See https://github.com/puppeteer/puppeteer/releases for which version of Chromium should work. Check Puppeteer-Sharp's default Chromium version: https://github.com/hardkoded/puppeteer-sharp/blob/master/lib/PuppeteerSharp/BrowserFetcher.cs
-        private static readonly int serviceWorkerDetectionTimeoutMs = (int)TimeSpan.FromSeconds(10).TotalMilliseconds;
+        private static readonly int serviceWorkerDetectionTimeoutMs = (int)TimeSpan.FromSeconds(30).TotalMilliseconds;
         private static readonly TimeSpan httpTimeout = TimeSpan.FromSeconds(5);
 
         public PuppeteerDetector(
@@ -121,7 +121,7 @@ namespace PWABuilder.ServiceWorkerDetector.Services
             try
             {
                 // First, reload the page. This is necessary because service workers are often registered on an already-served page, so they might not be in the cache.
-                await detectionResults.Page.ReloadAsync(serviceWorkerDetectionTimeoutMs, new[] { WaitUntilNavigation.Networkidle0 });
+                await detectionResults.Page.ReloadAsync(0, new[] { WaitUntilNavigation.Networkidle2 });
 
                 // See if we have HTML in the cache. If so, we'll deem it offline-capable.
                 // This is more resilient than futzing with offline mode and refreshing pages, which is fraught with race conditions.
