@@ -79,7 +79,8 @@ namespace PWABuilder.ServiceWorkerDetector
             };
             var allowedWildcardOrigins = new[]
             {
-                ".azurestaticapps.net"
+                ".azurestaticapps.net",
+                ".azurewebsites.net"
             };
             return allowedOrigins.Any(o => origin.Contains(o, StringComparison.OrdinalIgnoreCase)) ||
                 allowedWildcardOrigins.Any(o => origin.Contains(o, StringComparison.OrdinalIgnoreCase));
